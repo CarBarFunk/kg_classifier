@@ -1,0 +1,49 @@
+{
+    "type": "AdaptiveCard",
+    "body": [
+        {
+            "type": "TextBlock",
+            "text": "🤖 Gemini Topic Classification",
+            "wrap": true,
+            "weight": "Bolder",
+            "size": "Large"
+        },
+        {
+            "type": "TextBlock",
+            "text": "Kündigungsgründe Analyse",
+            "wrap": true,
+            "weight": "Bolder",
+            "size": "Medium",
+            "color": "Accent"
+        },
+        {
+            "type": "FactSet",
+            "facts": [
+                {
+                    "title": "Analysierte Einträge:",
+                    "value": "@{triggerBody()?['total_entries']}"
+                },
+                {
+                    "title": "Zeitstempel:",
+                    "value": "@{utcNow()}"
+                }
+            ]
+        },
+        {
+            "type": "TextBlock",
+            "text": "📋 Klassifizierung:",
+            "wrap": true,
+            "weight": "Bolder",
+            "size": "Medium",
+            "separator": true
+        },
+        {
+            "type": "TextBlock",
+            "text": "@{triggerBody()?['classification']}",
+            "wrap": true,
+            "spacing": "Small"
+        }
+    ],
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "version": "1.3"
+}
