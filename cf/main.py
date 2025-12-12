@@ -33,7 +33,6 @@ def classify_topics(request):
                 page_element_placeholder as cleaned_text
             FROM `reports.rep_piano_kuendigungsgruende`
             WHERE page_element_placeholder IS NOT NULL
-            and invoked_date >= "2025-11-01"
         """
 
         query_job = bq_client.query(query)
@@ -45,21 +44,25 @@ def classify_topics(request):
         if not texts:
             return {'message': 'No data found'}, 200
 
-        # Prepare prompt for Gemini
-        combined_text = "\n".join(texts[:100])  # Limit to first 100 entries
-        prompt = f"""Analyze the following cancellation reasons and classify them into main topics.
-Provide a summary with topic categories and their frequency:
+        # Prepare prompt for Gemini - send all texts
+        combined_text = "\n".join(texts)  # Send all entries
+        prompt = f"""Analysiere die folgenden {len(texts)} Kündigungsgründe und klassifiziere sie in Hauptthemen.
 
+WICHTIG: Antworte direkt mit der Analyse ohne Einleitung wie "Absolut", "Hier ist", "Gerne" etc.
+
+Kündigungsgründe:
 {combined_text}
 
-Please provide:
-1. Top 5-10 topic categories
-2. Brief description of each category
-3. Approximate percentage distribution
+Erstelle eine Zusammenfassung mit:
+1. Die Top 5-10 Themenkategorien
+2. Eine kurze Beschreibung jeder Kategorie
+3. Ungefähre prozentuale Verteilung
+
+Format: Beginne direkt mit "**Themenkategorien:**" oder einer Überschrift.
 """
 
         # Call Gemini
-        model = GenerativeModel("gemini-2.5-pro")
+        model = GenerativeModel("gemini-2.5-flash-lite")
         response = model.generate_content(prompt)
         classification_result = response.text
 
@@ -68,7 +71,7 @@ Please provide:
         safe_classification = classification_result.replace('\n', '\\n').replace('"', '\\"').replace('\t', ' ')
 
         message_payload = {
-            "title": "Cancellation Reasons Topic Classification",
+            "title": "Kündigungsgründe Topic Classification",
             "total_entries": str(len(texts)),
             "classification": safe_classification
         }
