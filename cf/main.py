@@ -32,7 +32,8 @@ def classify_topics(request):
             SELECT
                 page_element_placeholder as cleaned_text
             FROM `reports.rep_piano_kuendigungsgruende`
-            WHERE page_element_placeholder IS NOT NULL
+            WHERE invoked_date >= "2025-01-01"
+                and page_element_placeholder IS NOT NULL
         """
 
         query_job = bq_client.query(query)
