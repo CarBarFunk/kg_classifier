@@ -56,9 +56,11 @@ Kündigungsgründe:
 Erstelle eine Zusammenfassung mit:
 1. Die Top 5-10 Themenkategorien
 2. Eine kurze Beschreibung jeder Kategorie
-3. Ungefähre prozentuale Verteilung
+3. Anzahl der Instanzen pro Kategorie
+4. Prozentualer Anteil (als Anteil: Prozentzahl in Bold)
 
 Format: Beginne direkt mit "**Themenkategorien:**" oder einer Überschrift.
+Für jede Kategorie gib an: Kategoriename, Anzahl der Einträge, Prozentsatz
 """
 
         # Call Gemini
