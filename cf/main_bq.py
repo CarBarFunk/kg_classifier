@@ -29,9 +29,8 @@ def extract_topic_names(classification_result):
 @functions_framework.http
 def classify_topics(request):
     """
-    Optimized Cloud Function with batch processing
-    to classify topics using Gemini, save results in BigQuery,
-    and send results to Power Automate.
+    Cloud Function to classify topics using Gemini, save results in BigQuery,
+    and send results to Power Automate. Ensures both global and individual mappings are included.
     """
     try:
         # Initialize clients
@@ -84,44 +83,48 @@ Format: Beginne direkt mit "**Themenkategorien:**"."""
         global_response = model.generate_content(global_prompt)
         global_topics_result = global_response.text
 
+        # Debugging: Log raw global response
+        print("DEBUG - RAW GLOBAL TOPICS RESULT:", global_topics_result)
+
         # Extract global topics
         global_topics = extract_topic_names(global_topics_result)
+        print("DEBUG - Extracted Global Topics:", global_topics)
+
         if not global_topics:
+            # In case global topics were not extracted, log and return an error
+            print("ERROR - No global topics found in Gemini response:", global_topics_result)
             return {'error': 'Failed to extract global topics from Gemini response'}, 500
 
-        # **Step 2:** Batch processing for individual row mapping
-        batch_size = 1000  # Number of Rows per Batch → optimize this value
+        # **Step 2:** Individual row mapping using global topics
         rows_to_insert = []
         summary_texts = []
 
-        # Split data into batches
-        batches = [texts_metadata[i:i + batch_size] for i in range(0, len(texts_metadata), batch_size)]
+        for item in texts_metadata:
+            individual_text = item["cleaned_text"]
 
-        for batch in batches:
-            # Combine each batch into a single prompt
-            batch_text = "\n".join([item["cleaned_text"] for item in batch])
-            mapping_prompt = f"""Analysiere die folgenden Kündigungsgründe und ordne sie einer passenden globalen Themenkategorie zu:
-            Kündigungsgründe:
-            {batch_text}
-            Globale Themenkategorien:
-            {", ".join(global_topics)}
-            Format: Gib die Kategorien für jeden einzelnen Grund zurück, z.B., Zeile 1: "**Kosten / Preis-Leistungs-Verhältnis**".
-            """
+            # Create a prompt to map the individual text to a global topic
+            mapping_prompt = f"""Analysiere den folgenden Kündigungsgrund und ordne ihn einer der globalen Themenkategorien zu:
+Kündigungsgrund:
+{individual_text}
+Globale Themenkategorien:
+{', '.join(global_topics)}
+Ermittle die passendste Themenkategorie aus der Liste oben. Format: Gib nur die Themenkategorie als Antwort, z.B., "**Kosten / Preis-Leistungs-Verhältnis**".
+"""
+            # Call Gemini for individual mapping
+            response = model.generate_content(mapping_prompt)
+            classification_result = response.text.strip()
 
-            # Call Gemini for batch mapping
-            batch_response = model.generate_content(mapping_prompt)
-            batch_results = batch_response.text.split("\n")  # Split results line-by-line for each row in the batch
+            # Debugging: Log individual mapping result
+            print(f"DEBUG - Individual Classification for '{individual_text}': {classification_result}")
 
-            # Match results to rows in the batch
-            for idx, item in enumerate(batch):
-                classification_result = batch_results[idx].strip() if idx < len(batch_results) else None
-                rows_to_insert.append({
-                    "original_text": item["cleaned_text"],
-                    "classification_result": classification_result,
-                    "date": str(item["invoked_date"]),
-                    "portal": item["portal"]
-                })
-                summary_texts.append(f"{item['cleaned_text']}: {classification_result}")
+            # Verify mapping result and prepare BigQuery row
+            rows_to_insert.append({
+                "original_text": individual_text,
+                "classification_result": classification_result if classification_result else None,
+                "date": str(item["invoked_date"]),
+                "portal": item["portal"]
+            })
+            summary_texts.append(f"{individual_text}: {classification_result}")
 
         # **Step 3:** Insert rows into BigQuery
         errors = bq_client.insert_rows_json(
@@ -130,23 +133,33 @@ Format: Beginne direkt mit "**Themenkategorien:**"."""
             retry=bigquery.DEFAULT_RETRY
         )
         if errors:
+            print("ERROR - BigQuery Insert Errors:", errors)
             return {'error': f'Failed to write to BigQuery. Errors: {errors}'}, 500
 
         # Prepare summary message for Power Automate
-        safe_global_topics = global_topics_result.replace("\n", "\\n").replace('"', '\\"').replace("\t", " ")
-        safe_summary = "\n".join(summary_texts).replace("\n", "\\n").replace('"', '\\"').replace("\t", " ")
+        safe_global_topics = global_topics_result.replace("\n", "\\n").replace('"', '\\"').replace("\t", " ")  # Clean global topics
+        safe_summary = "\n".join(summary_texts).replace("\n", "\\n").replace('"', '\\"').replace("\t", " ")  # Clean individual summary
         message_payload = {
             "title": "Kündigungsgründe Topic Classification Summary",
             "total_entries": str(len(texts_metadata)),
-            "global_classification_summary": safe_global_topics,  # Send global classification
-            "classification_summary": safe_summary
+            "classification": safe_global_topics  # Direct inclusion in the `classification` field
         }
 
-        response = requests.post(power_automate_url, headers={'Content-Type': 'application/json'}, data=json.dumps(message_payload))
+        # Debugging: Log Payload for Power Automate
+        print("DEBUG - Payload for Teams:", message_payload)
+
+        # Send to Power Automate
+        response = requests.post(
+            power_automate_url,
+            headers={'Content-Type': 'application/json'},
+            data=json.dumps(message_payload)
+        )
         if response.status_code in [200, 202]:
-            return {'message': 'Classification sent successfully.', 'analyzed_count': len(texts_metadata)}, 200
+            return {'message': 'Classification sent to Teams successfully', 'analyzed_count': len(summary_texts)}, 200
         else:
-            return {'error': f'Failed to send summary to Teams. Status: {response.status_code}, Response: {response.text}'}, 500
+            print("ERROR - Failed to send to Teams. Response:", response.text)
+            return {'error': f'Failed to send to Teams. Status: {response.status_code}, Response: {response.text}'}, 500
 
     except Exception as e:
+        print("ERROR - Exception occurred:", str(e))
         return {'error': str(e)}, 500
