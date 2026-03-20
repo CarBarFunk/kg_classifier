@@ -8,3 +8,7 @@ run_api:
 # trigger CF
 trigger_cf:
 	@curl -X POST -H "Authorization: Bearer $(shell gcloud auth print-identity-token)" https://kg-topic-classifier-823771140216.europe-west1.run.app
+
+# trigger CF
+trigger_cf_II:
+	@curl -X POST -H "Authorization: Bearer $(shell gcloud auth print-identity-token)" https://kg-topic-classifier-ii-823771140216.europe-west1.run.app
